@@ -1,0 +1,32 @@
+name: Shnoor Backend Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: SSH and Deploy to Ubuntu
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Navigate to the backend folder
+            cd /home/ubuntu/SHNOOR-LMS-APPLICATION/backend
+            
+            # Pull the latest code
+            git pull origin main
+            
+            # Install dependencies
+            npm install
+            
+            # Restart the application using PM2
+            # We use 'app.js' because that is your entry file
+            pm2 restart shnoor-backend || pm2 start app.js --name "shnoor-backend"
