@@ -15,6 +15,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",
     "@aws-sdk/lib-storage": "^3.600.0",
+    "@aws-sdk/s3-request-presigner": "^3.1027.0",
     "@supabase/supabase-js": "^2.57.4",
     "axios": "^1.13.2",
     "cloudinary": "^1.41.3",

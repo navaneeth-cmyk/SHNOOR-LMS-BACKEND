@@ -587,6 +587,35 @@ export const initializeDatabase = async () => {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id SERIAL PRIMARY KEY,
+                user_id UUID REFERENCES users(user_id) ON DELETE CASCADE,
+                endpoint TEXT UNIQUE NOT NULL,
+                keys JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        
+        // Ensure returning users don't break with old schema
+        const alterQueries = [
+            `ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS keys JSONB`,
+            `ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+            `ALTER TABLE push_subscriptions ALTER COLUMN p256dh DROP NOT NULL`,
+            `ALTER TABLE push_subscriptions ALTER COLUMN auth DROP NOT NULL`,
+            `ALTER TABLE push_subscriptions ADD CONSTRAINT push_subscriptions_endpoint_key UNIQUE (endpoint)`
+        ];
+        
+        for (const q of alterQueries) {
+            try {
+                await pool.query(q);
+            } catch (err) {
+                // Ignore if constraint already exists or column doesn't exist
+            }
+        }
+
 
         // 7. Certificates
         console.log("   - Setting up Certificates...");

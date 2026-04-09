@@ -143,7 +143,7 @@ export const getStudentGroups = async (req, res) => {
          ON g.group_id = gm_user.group_id AND gm_user.user_id = $1
        LEFT JOIN admin_group_members gm_all
          ON g.group_id = gm_all.group_id
-       GROUP BY g.group_id
+       GROUP BY g.group_id, g.name, g.description, g.purpose, g.created_at, g.admin_id
        ORDER BY g.created_at DESC`,
       [internalUserId]
     );

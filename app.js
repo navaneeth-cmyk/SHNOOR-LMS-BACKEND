@@ -588,20 +588,29 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 443;
 const HOST = process.env.HOST || "0.0.0.0";
 
-const sslOptions = {
-  key: fs.readFileSync(new URL('./privkey.pem', import.meta.url)),
-  cert: fs.readFileSync(new URL('./fullchain.pem', import.meta.url)),
-};
+const sslOptions = (() => {
+  try {
+    return {
+      key: fs.readFileSync(new URL('./privkey.pem', import.meta.url)),
+      cert: fs.readFileSync(new URL('./fullchain.pem', import.meta.url)),
+    };
+  } catch (e) {
+    console.log("⚠️ SSL certificates not found. Running in local HTTP mode.");
+    return null;
+  }
+})();
 
-// Redirect HTTP (port 80) → HTTPS
-http.createServer((req, res) => {
-  res.writeHead(301, { Location: `https://${req.headers.host}${req.url}` });
-  res.end();
-}).listen(process.env.HTTP_PORT || 80, () => {
-  console.log(`🔁 HTTP redirect on port ${process.env.HTTP_PORT || 80}`);
-}).on('error', (err) => {
-  console.error("❌ HTTP redirect error:", err.message);
-});
+// Redirect HTTP (port 80) → HTTPS only if SSL is enabled
+if (sslOptions) {
+  http.createServer((req, res) => {
+    res.writeHead(301, { Location: `https://${req.headers.host}${req.url}` });
+    res.end();
+  }).listen(process.env.HTTP_PORT || 80, () => {
+    console.log(`🔁 HTTP redirect on port ${process.env.HTTP_PORT || 80}`);
+  }).on('error', (err) => {
+    console.error("❌ HTTP redirect error:", err.message);
+  });
+}
 
 pool
   .query("SELECT NOW()")
@@ -609,12 +618,16 @@ pool
     console.log("✅ Database connected successfully");
     await initializeDatabase();
     await initChatTables();
-    // Replace http server with https
-    const httpsServer = https.createServer(sslOptions, app);
-    // Reattach socket.io to the https server
-    io.attach(httpsServer);
-    httpsServer.listen(PORT, HOST, () => {
-      console.log(`✅ HTTPS Server running on port ${PORT}`);
+    
+    // Use HTTPS if ssl options exist, else use HTTP
+    const server = sslOptions 
+      ? https.createServer(sslOptions, app)
+      : http.createServer(app);
+      
+    // Reattach socket.io to the server
+    io.attach(server);
+    server.listen(PORT, HOST, () => {
+      console.log(`✅ Server running on port ${PORT} (${sslOptions ? "HTTPS" : "HTTP"})`);
     });
   })
   .catch((err) => {
