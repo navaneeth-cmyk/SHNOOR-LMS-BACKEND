@@ -169,7 +169,8 @@ export const bulkUploadChallenges = async (req, res) => {
             errors.push({
               row: rowNumber,
               data: row,
-              error: "Missing required fields (title, description, or difficulty)",
+              error:
+                "Missing required fields (title, description, or difficulty)",
             });
             return;
           }
@@ -237,7 +238,7 @@ export const bulkUploadChallenges = async (req, res) => {
                 challenge.difficulty,
                 challenge.starter_code,
                 JSON.stringify(challenge.test_cases),
-              ]
+              ],
             );
             insertedChallenges.push(result.rows[0]);
           }
@@ -263,11 +264,15 @@ export const bulkUploadChallenges = async (req, res) => {
       })
       .on("error", (err) => {
         console.error("CSV parsing error:", err);
-        res.status(500).json({ message: "Failed to parse CSV file", error: err.message });
+        res
+          .status(500)
+          .json({ message: "Failed to parse CSV file", error: err.message });
       });
   } catch (err) {
     console.error("Bulk upload error:", err);
-    res.status(500).json({ message: "Server error during upload", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Server error during upload", error: err.message });
   }
 };
 
@@ -280,7 +285,10 @@ const runSingleTest = (cmd, args, input, options = {}, timeoutMs = null) => {
     try {
       child = spawn(cmd, args, options);
     } catch (spawnError) {
-      resolve({ stdout: "", stderr: spawnError.message || "Failed to start runtime process" });
+      resolve({
+        stdout: "",
+        stderr: spawnError.message || "Failed to start runtime process",
+      });
       return;
     }
 
@@ -298,7 +306,11 @@ const runSingleTest = (cmd, args, input, options = {}, timeoutMs = null) => {
 
     if (timeoutMs && Number.isFinite(timeoutMs) && timeoutMs > 0) {
       timeoutHandle = setTimeout(() => {
-        try { child.kill("SIGKILL"); } catch (_) { /* ignore */ }
+        try {
+          child.kill("SIGKILL");
+        } catch (_) {
+          /* ignore */
+        }
         safeResolve({
           stdout: stdout.trim(),
           stderr: `Execution timed out after ${timeoutMs / 1000} seconds`,
@@ -314,7 +326,10 @@ const runSingleTest = (cmd, args, input, options = {}, timeoutMs = null) => {
     child.stdin.end();
     child.on("error", (err) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      safeResolve({ stdout: "", stderr: err?.message || `Runtime command not found: ${cmd}` });
+      safeResolve({
+        stdout: "",
+        stderr: err?.message || `Runtime command not found: ${cmd}`,
+      });
     });
     child.on("close", () => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
@@ -329,16 +344,15 @@ const runSingleTest = (cmd, args, input, options = {}, timeoutMs = null) => {
 const loadTestCasesById = async (id) => {
   if (!id) return null;
 
-  // 1) Try practice challenge id
   const practiceRes = await pool.query(
     "SELECT test_cases FROM practice_challenges WHERE challenge_id::text = $1",
-    [String(id)]
+    [String(id)],
   );
+
   if (practiceRes.rowCount > 0) {
     return practiceRes.rows[0].test_cases;
   }
 
-  // 2) Try exam coding question mapping (question_id or coding_id)
   const examRes = await pool.query(
     `
     SELECT json_agg(
@@ -353,7 +367,7 @@ const loadTestCasesById = async (id) => {
     JOIN exam_coding_questions cq ON cq.coding_id = tc.coding_id
     WHERE cq.question_id::text = $1 OR cq.coding_id::text = $1
     `,
-    [String(id)]
+    [String(id)],
   );
 
   if (examRes.rowCount > 0 && examRes.rows[0].test_cases) {
@@ -394,7 +408,11 @@ const normalizeToken = (token) => {
 
 const compareOutputs = (expectedRaw, actualRaw) => {
   const comparison = compareExecutionOutput(expectedRaw, actualRaw);
-  return { passed: comparison.passed, expected: comparison.expected, actual: comparison.actual };
+  return {
+    passed: comparison.passed,
+    expected: comparison.expected,
+    actual: comparison.actual,
+  };
 };
 
 // =====================================================
@@ -405,14 +423,15 @@ const runWithFallbackCommands = async (
   args,
   input,
   options = {},
-  timeoutMs = null
+  timeoutMs = null,
 ) => {
   let lastError = "";
   for (const cmd of candidates) {
     const result = await runSingleTest(cmd, args, input, options, timeoutMs);
     const stderr = String(result.stderr || "");
 
-    const notFound = /not recognized|enoent|command not found|cannot find/i.test(stderr);
+    const notFound =
+      /not recognized|enoent|command not found|cannot find/i.test(stderr);
     if (notFound) {
       lastError = stderr;
       continue;
@@ -421,12 +440,16 @@ const runWithFallbackCommands = async (
   }
   return {
     stdout: "",
-    stderr: lastError || `None of these runtimes are available: ${candidates.join(", ")}`,
+    stderr:
+      lastError ||
+      `None of these runtimes are available: ${candidates.join(", ")}`,
   };
 };
 
 const isDockerUnavailableError = (stderr) =>
-  /not recognized|enoent|command not found|cannot find/i.test(String(stderr || ""));
+  /not recognized|enoent|command not found|cannot find/i.test(
+    String(stderr || ""),
+  );
 
 // =====================================================
 //  Helper: run code inside a Docker container
@@ -436,32 +459,47 @@ const runDockerCommand = async (
   image,
   command,
   input = "",
-  timeoutMs = 5000
+  timeoutMs = 5000,
 ) => {
   const mountPath = path.resolve(workDir);
   return runSingleTest(
     "docker",
     [
-      "run", "--rm", "-i",
-      "--network", "none",
-      "--memory", "256m",
-      "--cpus", "1",
-      "-e", "PYTHONDONTWRITEBYTECODE=1",
-      "-v", `${mountPath}:/code`,
-      "-w", "/code",
+      "run",
+      "--rm",
+      "-i",
+      "--network",
+      "none",
+      "--memory",
+      "256m",
+      "--cpus",
+      "1",
+      "-e",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "-v",
+      `${mountPath}:/code`,
+      "-w",
+      "/code",
       image,
-      "sh", "-lc", command,
+      "sh",
+      "-lc",
+      command,
     ],
     input,
     { cwd: workDir },
-    timeoutMs
+    timeoutMs,
   );
 };
 
 // =====================================================
 //  Helper: prepare language runner (Docker + local fallback)
 // =====================================================
-const prepareLanguageRunner = async (workDir, language, code, timeoutMs = 5000) => {
+const prepareLanguageRunner = async (
+  workDir,
+  language,
+  code,
+  timeoutMs = 5000,
+) => {
   const normalizedLanguage = (language || "").toLowerCase();
 
   if (normalizedLanguage === "python") {
@@ -469,11 +507,19 @@ const prepareLanguageRunner = async (workDir, language, code, timeoutMs = 5000) 
     return {
       runFn: async (input) => {
         const dockerResult = await runDockerCommand(
-          workDir, "python:3.11-alpine", "python /code/main.py", input, timeoutMs
+          workDir,
+          "python:3.11-alpine",
+          "python /code/main.py",
+          input,
+          timeoutMs,
         );
         if (!isDockerUnavailableError(dockerResult.stderr)) return dockerResult;
         return runWithFallbackCommands(
-          ["python3", "python", "py"], ["main.py"], input, { cwd: workDir }, timeoutMs
+          ["python3", "python", "py"],
+          ["main.py"],
+          input,
+          { cwd: workDir },
+          timeoutMs,
         );
       },
     };
@@ -482,13 +528,24 @@ const prepareLanguageRunner = async (workDir, language, code, timeoutMs = 5000) 
   if (normalizedLanguage === "javascript" || normalizedLanguage === "js") {
     return {
       runFn: async (input) => {
-        fs.writeFileSync(path.join(workDir, "main.js"), buildJavaScriptRuntimeSource(code, input));
+        fs.writeFileSync(
+          path.join(workDir, "main.js"),
+          buildJavaScriptRuntimeSource(code, input),
+        );
         const dockerResult = await runDockerCommand(
-          workDir, "node:20-alpine", "node /code/main.js", input, timeoutMs
+          workDir,
+          "node:20-alpine",
+          "node /code/main.js",
+          input,
+          timeoutMs,
         );
         if (!isDockerUnavailableError(dockerResult.stderr)) return dockerResult;
         return runWithFallbackCommands(
-          ["node"], ["main.js"], input, { cwd: workDir }, timeoutMs
+          ["node"],
+          ["main.js"],
+          input,
+          { cwd: workDir },
+          timeoutMs,
         );
       },
     };
@@ -497,7 +554,11 @@ const prepareLanguageRunner = async (workDir, language, code, timeoutMs = 5000) 
   if (normalizedLanguage === "java") {
     fs.writeFileSync(path.join(workDir, "Main.java"), code);
     const dockerCompile = await runDockerCommand(
-      workDir, "eclipse-temurin:17-jdk-alpine", "javac /code/Main.java", "", timeoutMs
+      workDir,
+      "eclipse-temurin:17-jdk-alpine",
+      "javac /code/Main.java",
+      "",
+      timeoutMs,
     );
 
     if (!isDockerUnavailableError(dockerCompile.stderr)) {
@@ -505,13 +566,21 @@ const prepareLanguageRunner = async (workDir, language, code, timeoutMs = 5000) 
       return {
         runFn: (input) =>
           runDockerCommand(
-            workDir, "eclipse-temurin:17-jdk-alpine", "java -cp /code Main", input, timeoutMs
+            workDir,
+            "eclipse-temurin:17-jdk-alpine",
+            "java -cp /code Main",
+            input,
+            timeoutMs,
           ),
       };
     }
 
     const localCompile = await runSingleTest(
-      "javac", ["Main.java"], null, { cwd: workDir }, timeoutMs
+      "javac",
+      ["Main.java"],
+      null,
+      { cwd: workDir },
+      timeoutMs,
     );
     if (localCompile.stderr) return { compileError: localCompile.stderr };
     return {
@@ -523,7 +592,11 @@ const prepareLanguageRunner = async (workDir, language, code, timeoutMs = 5000) 
   if (normalizedLanguage === "c") {
     fs.writeFileSync(path.join(workDir, "main.c"), code);
     const dockerCompile = await runDockerCommand(
-      workDir, "gcc:13", "gcc /code/main.c -O2 -o /code/main", "", timeoutMs
+      workDir,
+      "gcc:13",
+      "gcc /code/main.c -O2 -o /code/main",
+      "",
+      timeoutMs,
     );
 
     if (!isDockerUnavailableError(dockerCompile.stderr)) {
@@ -535,14 +608,21 @@ const prepareLanguageRunner = async (workDir, language, code, timeoutMs = 5000) 
     }
 
     const localCompile = await runSingleTest(
-      "gcc", ["main.c", "-O2", "-o", "main"], null, { cwd: workDir }, timeoutMs
+      "gcc",
+      ["main.c", "-O2", "-o", "main"],
+      null,
+      { cwd: workDir },
+      timeoutMs,
     );
     if (localCompile.stderr) return { compileError: localCompile.stderr };
     return {
       runFn: (input) =>
         runSingleTest(
           process.platform === "win32" ? "main.exe" : "./main",
-          [], input, { cwd: workDir }, timeoutMs
+          [],
+          input,
+          { cwd: workDir },
+          timeoutMs,
         ),
     };
   }
@@ -550,7 +630,11 @@ const prepareLanguageRunner = async (workDir, language, code, timeoutMs = 5000) 
   if (normalizedLanguage === "cpp" || normalizedLanguage === "c++") {
     fs.writeFileSync(path.join(workDir, "main.cpp"), code);
     const dockerCompile = await runDockerCommand(
-      workDir, "gcc:13", "g++ /code/main.cpp -std=c++17 -O2 -o /code/main", "", timeoutMs
+      workDir,
+      "gcc:13",
+      "g++ /code/main.cpp -std=c++17 -O2 -o /code/main",
+      "",
+      timeoutMs,
     );
 
     if (!isDockerUnavailableError(dockerCompile.stderr)) {
@@ -562,14 +646,21 @@ const prepareLanguageRunner = async (workDir, language, code, timeoutMs = 5000) 
     }
 
     const localCompile = await runSingleTest(
-      "g++", ["main.cpp", "-std=c++17", "-O2", "-o", "main"], null, { cwd: workDir }, timeoutMs
+      "g++",
+      ["main.cpp", "-std=c++17", "-O2", "-o", "main"],
+      null,
+      { cwd: workDir },
+      timeoutMs,
     );
     if (localCompile.stderr) return { compileError: localCompile.stderr };
     return {
       runFn: (input) =>
         runSingleTest(
           process.platform === "win32" ? "main.exe" : "./main",
-          [], input, { cwd: workDir }, timeoutMs
+          [],
+          input,
+          { cwd: workDir },
+          timeoutMs,
         ),
     };
   }
@@ -579,10 +670,20 @@ const prepareLanguageRunner = async (workDir, language, code, timeoutMs = 5000) 
     return {
       runFn: async (input) => {
         const dockerResult = await runDockerCommand(
-          workDir, "golang:1.22-alpine", "go run /code/main.go", input, timeoutMs
+          workDir,
+          "golang:1.22-alpine",
+          "go run /code/main.go",
+          input,
+          timeoutMs,
         );
         if (!isDockerUnavailableError(dockerResult.stderr)) return dockerResult;
-        return runSingleTest("go", ["run", "main.go"], input, { cwd: workDir }, timeoutMs);
+        return runSingleTest(
+          "go",
+          ["run", "main.go"],
+          input,
+          { cwd: workDir },
+          timeoutMs,
+        );
       },
     };
   }
@@ -618,7 +719,8 @@ const buildCheckOutput = (testCases, results, passedCountRef) => {
     for (let i = 0; i < testCases.length; i++) {
       const tc = testCases[i];
       const input = tc.input ?? "";
-      const expectedRaw = tc.output ?? tc.expected_output ?? tc.expectedOutput ?? "";
+      const expectedRaw =
+        tc.output ?? tc.expected_output ?? tc.expectedOutput ?? "";
       const result = await runFn(input);
       const isPublic = tc.isPublic !== false && tc.is_hidden !== true;
       const comparison = compareOutputs(expectedRaw, result.stdout);
@@ -648,9 +750,11 @@ const buildCompileFailureResults = (testCases, compileError) =>
       testCaseNumber: index + 1,
       passed: false,
       isPublic,
-      input: isPublic ? tc.input ?? "" : undefined,
+      input: isPublic ? (tc.input ?? "") : undefined,
       expectedOutput: isPublic
-        ? normalizeOutput(tc.output ?? tc.expected_output ?? tc.expectedOutput ?? "")
+        ? normalizeOutput(
+            tc.output ?? tc.expected_output ?? tc.expectedOutput ?? "",
+          )
         : undefined,
       actualOutput: isPublic ? "" : undefined,
       error: compileError,
@@ -661,15 +765,18 @@ const buildCompileFailureResults = (testCases, compileError) =>
 //  Helper: resolve and validate test cases
 // =====================================================
 const resolveTestCases = async (testCases, challengeId, isExamMode) => {
-  // Normalize string-encoded test cases
   if (!Array.isArray(testCases) && typeof testCases === "string") {
-    try { testCases = JSON.parse(testCases); } catch (_) { testCases = []; }
+    try {
+      testCases = JSON.parse(testCases);
+    } catch (_) {
+      testCases = [];
+    }
   }
 
-  // If we already have valid test cases, return them
-  if (Array.isArray(testCases) && testCases.length > 0) return { testCases };
+  if (Array.isArray(testCases) && testCases.length > 0) {
+    return { testCases };
+  }
 
-  // Otherwise load from DB
   if (!challengeId) {
     return {
       error: {
@@ -682,6 +789,7 @@ const resolveTestCases = async (testCases, challengeId, isExamMode) => {
   }
 
   const dbTestCases = await loadTestCasesById(challengeId);
+
   if (!dbTestCases) {
     return {
       error: {
@@ -693,9 +801,12 @@ const resolveTestCases = async (testCases, challengeId, isExamMode) => {
     };
   }
 
-  const parsed = typeof dbTestCases === "string" ? JSON.parse(dbTestCases) : dbTestCases;
+  const parsed =
+    typeof dbTestCases === "string" ? JSON.parse(dbTestCases) : dbTestCases;
   if (!Array.isArray(parsed) || parsed.length === 0) {
-    return { error: { status: 404, message: "No test cases found for this challenge" } };
+    return {
+      error: { status: 404, message: "No test cases found for this challenge" },
+    };
   }
 
   return { testCases: parsed };
@@ -717,7 +828,7 @@ export const getCompletedChallenges = async (req, res) => {
     const result = await pool.query(
       `SELECT DISTINCT challenge_id FROM practice_submissions
        WHERE user_id = $1 AND all_passed = TRUE`,
-      [userId]
+      [userId],
     );
 
     const completedIds = result.rows.map((r) => r.challenge_id);
@@ -744,19 +855,36 @@ export const runPracticeCode = async (req, res) => {
 
     language = language.toLowerCase();
 
+    if (
+      !isExamMode &&
+      !challengeId &&
+      (!testCases || (Array.isArray(testCases) && testCases.length === 0))
+    ) {
+      return res
+        .status(400)
+        .json({ message: "challengeId or testCases is required" });
+    }
+
     const resolved = await resolveTestCases(testCases, challengeId, isExamMode);
     if (resolved.error) {
-      return res.status(resolved.error.status).json({ message: resolved.error.message });
+      return res
+        .status(resolved.error.status)
+        .json({ message: resolved.error.message });
     }
     testCases = resolved.testCases;
 
-    // Create temp working directory
+    if (testCases.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "No test cases available for this challenge" });
+    }
+
     const baseTmp = path.join(process.cwd(), "tmp");
     if (!fs.existsSync(baseTmp)) fs.mkdirSync(baseTmp);
 
     workDir = path.join(
       baseTmp,
-      `practice_${Date.now()}_${Math.random().toString(36).slice(2)}`
+      `practice_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     );
     fs.mkdirSync(workDir);
 
@@ -773,7 +901,11 @@ export const runPracticeCode = async (req, res) => {
     if (prepared.compileError) {
       return res.json({
         results: buildCompileFailureResults(testCases, prepared.compileError),
-        summary: { total: testCases.length, passed: 0, failed: testCases.length },
+        summary: {
+          total: testCases.length,
+          passed: 0,
+          failed: testCases.length,
+        },
         passed: false,
       });
     }
@@ -797,7 +929,9 @@ export const runPracticeCode = async (req, res) => {
       if (workDir && fs.existsSync(workDir)) {
         fs.rmSync(workDir, { recursive: true, force: true });
       }
-    } catch (_) { /* ignore cleanup errors */ }
+    } catch (_) {
+      /* ignore cleanup errors */
+    }
   }
 };
 
@@ -815,7 +949,11 @@ export const submitPracticeCode = async (req, res) => {
       return res.status(400).json({ message: "code and language required" });
     }
 
-    if (!isExamMode && !challengeId && (!Array.isArray(testCases) || testCases.length === 0)) {
+    if (
+      !isExamMode &&
+      !challengeId &&
+      (!Array.isArray(testCases) || testCases.length === 0)
+    ) {
       return res.status(400).json({ message: "challengeId is required" });
     }
 
@@ -823,7 +961,9 @@ export const submitPracticeCode = async (req, res) => {
 
     const resolved = await resolveTestCases(testCases, challengeId, isExamMode);
     if (resolved.error) {
-      return res.status(resolved.error.status).json({ message: resolved.error.message });
+      return res
+        .status(resolved.error.status)
+        .json({ message: resolved.error.message });
     }
     testCases = resolved.testCases;
 
@@ -833,7 +973,7 @@ export const submitPracticeCode = async (req, res) => {
 
     workDir = path.join(
       baseTmp,
-      `submit_${Date.now()}_${Math.random().toString(36).slice(2)}`
+      `submit_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     );
     fs.mkdirSync(workDir);
 
@@ -850,7 +990,11 @@ export const submitPracticeCode = async (req, res) => {
     if (prepared.compileError) {
       return res.json({
         results: buildCompileFailureResults(testCases, prepared.compileError),
-        summary: { total: testCases.length, passed: 0, failed: testCases.length },
+        summary: {
+          total: testCases.length,
+          passed: 0,
+          failed: testCases.length,
+        },
         passed: false,
       });
     }
@@ -868,7 +1012,16 @@ export const submitPracticeCode = async (req, res) => {
         `INSERT INTO practice_submissions 
           (user_id, challenge_id, code, language, passed_count, total_count, score, all_passed) 
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [userId, challengeId, code, language, passedCount, results.length, score, allPassed]
+        [
+          userId,
+          challengeId,
+          code,
+          language,
+          passedCount,
+          results.length,
+          score,
+          allPassed,
+        ],
       );
     } catch (dbErr) {
       console.error("Failed to save submission:", dbErr);
@@ -890,12 +1043,16 @@ export const submitPracticeCode = async (req, res) => {
     });
   } catch (err) {
     console.error("submitPracticeCode error:", err);
-    res.status(500).json({ message: "Failed to submit code", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Failed to submit code", error: err.message });
   } finally {
     try {
       if (workDir && fs.existsSync(workDir)) {
         fs.rmSync(workDir, { recursive: true, force: true });
       }
-    } catch (_) { /* ignore cleanup errors */ }
+    } catch (_) {
+      /* ignore cleanup errors */
+    }
   }
 };
