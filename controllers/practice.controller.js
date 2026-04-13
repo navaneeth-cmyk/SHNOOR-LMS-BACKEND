@@ -4,6 +4,8 @@ import { Readable } from "stream";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
+import { buildJavaScriptRuntimeSource } from "../utils/javascriptExecution.js";
+import { compareExecutionOutput } from "../utils/executionOutput.js";
 
 // =====================================================
 //  Create a new challenge
@@ -391,27 +393,8 @@ const normalizeToken = (token) => {
 };
 
 const compareOutputs = (expectedRaw, actualRaw) => {
-  const expected = normalizeOutput(expectedRaw);
-  const actual = normalizeOutput(actualRaw);
-
-  // Fast path: exact match after newline/trim normalization
-  if (expected === actual) return { passed: true, expected, actual };
-
-  // Fallback: token-based comparison to tolerate extra spacing/newlines
-  const expectedTokens = expected.split(/\s+/).filter(Boolean).map(normalizeToken);
-  const actualTokens = actual.split(/\s+/).filter(Boolean).map(normalizeToken);
-
-  if (expectedTokens.length !== actualTokens.length) {
-    return { passed: false, expected, actual };
-  }
-
-  for (let i = 0; i < expectedTokens.length; i++) {
-    if (expectedTokens[i] !== actualTokens[i]) {
-      return { passed: false, expected, actual };
-    }
-  }
-
-  return { passed: true, expected, actual };
+  const comparison = compareExecutionOutput(expectedRaw, actualRaw);
+  return { passed: comparison.passed, expected: comparison.expected, actual: comparison.actual };
 };
 
 // =====================================================
@@ -497,9 +480,9 @@ const prepareLanguageRunner = async (workDir, language, code, timeoutMs = 5000) 
   }
 
   if (normalizedLanguage === "javascript" || normalizedLanguage === "js") {
-    fs.writeFileSync(path.join(workDir, "main.js"), code);
     return {
       runFn: async (input) => {
+        fs.writeFileSync(path.join(workDir, "main.js"), buildJavaScriptRuntimeSource(code, input));
         const dockerResult = await runDockerCommand(
           workDir, "node:20-alpine", "node /code/main.js", input, timeoutMs
         );

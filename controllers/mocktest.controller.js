@@ -2,6 +2,8 @@ import { spawn, exec } from "child_process";
 import fs from "fs";
 import path from "path";
 import { promisify } from "util";
+import { buildJavaScriptRuntimeSource } from "../utils/javascriptExecution.js";
+import { compareExecutionOutput } from "../utils/executionOutput.js";
 
 const execAsync = promisify(exec);
 
@@ -200,7 +202,7 @@ const evaluateTests = async (testCases, runFn) => {
     const expected = String(tc.output ?? "").trim();
     const actual   = (result.stdout ?? "").trim();
     const hasError = !!(result.stderr?.length);
-    const ok       = !hasError && actual === expected;
+    const ok       = !hasError && compareExecutionOutput(expected, actual).passed;
 
     if (ok) passedCount++;
 
@@ -255,9 +257,12 @@ export const runMockTestCode = async (req, res) => {
 
     /* ── JAVASCRIPT ── */
     else if (language === "javascript" || language === "js") {
-      fs.writeFileSync(path.join(workDir, "main.js"), code, "utf8");
+      fs.writeFileSync(path.join(workDir, "main.js"), buildJavaScriptRuntimeSource(code, ""), "utf8");
       const { results, passedCount: pc } = await evaluateTests(testCases, (input) =>
-        runScript("node main.js", input, workDir)
+        {
+          fs.writeFileSync(path.join(workDir, "main.js"), buildJavaScriptRuntimeSource(code, input), "utf8");
+          return runScript("node main.js", input, workDir);
+        }
       );
       testResults = results; passedCount = pc;
     }
