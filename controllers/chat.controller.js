@@ -493,23 +493,29 @@ export const getAvailableInstructors = async (req, res) => {
 
 // POST /api/chats/groups
 export const createGroup = async (req, res) => {
+  const client = await pool.connect();
+
   try {
     console.log("🔵 POST /api/chats/groups hit");
     console.log("🔵 User:", req.user);
     console.log("🔵 Body:", req.body);
 
-    const { name, description } = req.body;
+    const name = String(req.body?.name || "").trim();
+    const description = String(req.body?.description || "").trim();
     const userId = req.user.id;
+
+    await client.query("BEGIN");
 
     if (!name) {
       console.error("❌ Group name is empty");
+      await client.query("ROLLBACK");
       return res.status(400).json({
         message: "Group name is required.",
       });
     }
 
     // Get user's college
-    const userRes = await pool.query(
+    const userRes = await client.query(
       "SELECT college FROM users WHERE user_id = $1",
       [userId],
     );
@@ -520,6 +526,7 @@ export const createGroup = async (req, res) => {
 
     if (!college) {
       console.error("❌ User has no college set");
+      await client.query("ROLLBACK");
       return res.status(400).json({
         message: "Please set your college in profile settings first.",
       });
@@ -527,9 +534,9 @@ export const createGroup = async (req, res) => {
 
     console.log("🔵 Creating group with:", { name, description, college, userId });
 
-    const newGroup = await pool.query(
+    const newGroup = await client.query(
       "INSERT INTO college_groups (name, description, college, creator_id) VALUES ($1, $2, $3, $4) RETURNING *",
-      [name, description, college, userId],
+      [name, description || null, college, userId],
     );
 
     const groupId = newGroup.rows[0].group_id;
@@ -537,16 +544,29 @@ export const createGroup = async (req, res) => {
     console.log("🔵 Group created:", groupId);
 
     // Add creator as admin
-    await pool.query(
+    await client.query(
       "INSERT INTO clg_group_members (group_id, user_id, role) VALUES ($1, $2, 'admin')",
       [groupId, userId],
     );
 
+    await client.query("COMMIT");
+
     console.log("✅ Group with members created successfully");
-    res.status(201).json(newGroup.rows[0]);
+    res.status(201).json({
+      ...newGroup.rows[0],
+      member_count: 1,
+      last_message: null,
+    });
   } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (_) {
+      // ignore rollback errors
+    }
     console.error("❌ createGroup Error:", err);
     res.status(500).json({ message: "Server Error", error: err.message });
+  } finally {
+    client.release();
   }
 };
 
