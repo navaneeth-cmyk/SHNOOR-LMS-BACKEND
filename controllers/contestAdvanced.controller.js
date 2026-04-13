@@ -2,6 +2,8 @@ import pool from "../db/postgres.js";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
+import { buildJavaScriptRuntimeSource } from "../utils/javascriptExecution.js";
+import { compareExecutionOutput } from "../utils/executionOutput.js";
 
 /* =====================================================
  helper
@@ -57,8 +59,8 @@ export const runCodeWithTestCases = async (code, language, testCases, questionMa
         const tc = testCases[i];
         const result = await runFn(tc.input ?? "");
 
-        const expected = String(tc.expected_output ?? "").trim();
-        const ok = result.stderr === "" && result.stdout === expected;
+        const comparison = compareExecutionOutput(tc.expected_output ?? "", result.stdout ?? "");
+        const ok = result.stderr === "" && comparison.passed;
 
         if (ok) passedCount++;
 
@@ -67,7 +69,7 @@ export const runCodeWithTestCases = async (code, language, testCases, questionMa
           passed: ok,
           isHidden: tc.is_hidden === true,
           input: tc.is_hidden ? undefined : tc.input,
-          expectedOutput: tc.is_hidden ? undefined : expected,
+          expectedOutput: tc.is_hidden ? undefined : comparison.expected,
           actualOutput: tc.is_hidden ? undefined : result.stdout,
           error: result.stderr || null
         });
@@ -97,10 +99,13 @@ export const runCodeWithTestCases = async (code, language, testCases, questionMa
     }
     /* ---------- JAVASCRIPT ---------- */
     else if (language === "javascript" || language === "js") {
-      fs.writeFileSync(path.join(workDir, "main.js"), code);
-      await checkOutput((input) =>
-        runSingleTest("node", ["main.js"], input, { cwd: workDir })
-      );
+      await checkOutput((input) => {
+        fs.writeFileSync(
+          path.join(workDir, "main.js"),
+          buildJavaScriptRuntimeSource(code, input)
+        );
+        return runSingleTest("node", ["main.js"], input, { cwd: workDir });
+      });
     }
     /* ---------- C ---------- */
     else if (language === "c") {

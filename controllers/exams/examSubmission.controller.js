@@ -4,6 +4,8 @@ import { autoGradeDescriptive } from "./examdescriptive.controller.js";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
+import { buildJavaScriptRuntimeSource } from "../../utils/javascriptExecution.js";
+import { compareExecutionOutput } from "../../utils/executionOutput.js";
 
 const runSingleTest = (cmd, args, input, options = {}, timeoutMs = 5000) => {
   return new Promise((resolve) => {
@@ -84,21 +86,7 @@ const normalizeToken = (token) => {
 };
 
 const compareOutputs = (expectedRaw, actualRaw) => {
-  const expected = normalizeOutput(expectedRaw);
-  const actual = normalizeOutput(actualRaw);
-
-  if (expected === actual) return true;
-
-  const expectedTokens = expected.split(/\s+/).filter(Boolean).map(normalizeToken);
-  const actualTokens = actual.split(/\s+/).filter(Boolean).map(normalizeToken);
-
-  if (expectedTokens.length !== actualTokens.length) return false;
-
-  for (let i = 0; i < expectedTokens.length; i += 1) {
-    if (expectedTokens[i] !== actualTokens[i]) return false;
-  }
-
-  return true;
+  return compareExecutionOutput(expectedRaw, actualRaw).passed;
 };
 
 const isDockerUnavailableError = (stderr) =>
@@ -169,9 +157,9 @@ const prepareLanguageRunner = async (workDir, language, code, timeoutMs = 5000) 
   }
 
   if (normalizedLanguage === "javascript" || normalizedLanguage === "js") {
-    fs.writeFileSync(path.join(workDir, "main.js"), code);
     return {
       runFn: async (input) => {
+        fs.writeFileSync(path.join(workDir, "main.js"), buildJavaScriptRuntimeSource(code, input));
         const dockerResult = await runDockerCommand(workDir, "node:20-alpine", "node /code/main.js", input, timeoutMs);
         if (!isDockerUnavailableError(dockerResult.stderr)) return dockerResult;
         return runWithFallbackCommands(["node"], ["main.js"], input, { cwd: workDir }, timeoutMs);
