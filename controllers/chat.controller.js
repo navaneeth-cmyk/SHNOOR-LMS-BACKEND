@@ -978,15 +978,6 @@ export const getGroupMembers = async (req, res) => {
     const { groupId } = req.params;
     console.log(`[getGroupMembers] Fetching members for group: ${groupId}`);
 
-    const groupCheck = await pool.query(
-      "SELECT 1 FROM college_groups WHERE group_id = $1",
-      [groupId],
-    );
-
-    if (groupCheck.rows.length === 0) {
-      return res.status(404).json({ message: "Group not found" });
-    }
-
     const result = await pool.query(
       `
             SELECT u.user_id as id, u.full_name as name, u.role as global_role, gm.role as group_role, u.photo_url, u.email 
