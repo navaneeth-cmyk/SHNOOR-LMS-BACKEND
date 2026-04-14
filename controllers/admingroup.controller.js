@@ -128,7 +128,7 @@ export const getStudentGroups = async (req, res) => {
     const internalUserId = userLookup.rows[0].user_id;
     console.log(`[getStudentGroups] Mapped to internal user_id: ${internalUserId}`);
 
-    // Step 2: Fetch groups using the correct internal UUID
+    // Step 2: Fetch groups using a clean Subquery (Fixes the GROUP BY crash completely)
     const groupsQuery = await pool.query(
       `SELECT 
          g.group_id,
@@ -137,13 +137,10 @@ export const getStudentGroups = async (req, res) => {
          g.purpose,
          g.created_at,
          g.admin_id,
-         COUNT(gm_all.user_id) AS member_count
+         (SELECT COUNT(*) FROM admin_group_members gm WHERE gm.group_id = g.group_id) AS member_count
        FROM admin_groups g
        JOIN admin_group_members gm_user
          ON g.group_id = gm_user.group_id AND gm_user.user_id = $1
-       LEFT JOIN admin_group_members gm_all
-         ON g.group_id = gm_all.group_id
-       GROUP BY g.group_id, g.name, g.description, g.purpose, g.created_at, g.admin_id
        ORDER BY g.created_at DESC`,
       [internalUserId]
     );
