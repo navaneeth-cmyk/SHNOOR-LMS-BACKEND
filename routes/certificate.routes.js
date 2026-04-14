@@ -14,11 +14,24 @@ import {
   uploadCertificatePdfFileToSupabase,
   removeLocalFileSafe,
 } from "../services/supabaseStorage.service.js";
+import { uploadBufferToS3 } from "../services/s3Storage.service.js";
+import multer from "multer";
 import firebaseAuth from "../middlewares/firebaseAuth.js";
 import attachUser from "../middlewares/attachUser.js";
 import roleGuard from "../middlewares/roleGuard.js";
 
 const router = express.Router();
+
+const uploadCertificateImage = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if ((file.mimetype || "").startsWith("image/")) {
+      return cb(null, true);
+    }
+    cb(new Error("Only image files are allowed"), false);
+  },
+});
 
 const ensureCertificateSettingsTable = async () => {
   await pool.query(`
@@ -63,6 +76,36 @@ router.get("/settings/config", async (_req, res) => {
     return res.status(500).json({ message: "Failed to load certificate configuration" });
   }
 });
+
+router.post(
+  "/settings/upload-image",
+  firebaseAuth,
+  attachUser,
+  roleGuard("admin"),
+  uploadCertificateImage.single("file"),
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    try {
+      const { url, objectPath } = await uploadBufferToS3(req.file.buffer, {
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype || "image/png",
+        folder: "certificate-assets",
+      });
+
+      return res.status(200).json({
+        success: true,
+        url,
+        objectPath,
+      });
+    } catch (err) {
+      console.error("POST /settings/upload-image error:", err.message);
+      return res.status(500).json({ message: "Failed to upload certificate image" });
+    }
+  }
+);
 
 router.post(
   "/settings/config",
