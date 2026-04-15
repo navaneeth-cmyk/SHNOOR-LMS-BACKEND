@@ -42,11 +42,11 @@ export const getMyLearningPaths = async (req, res) => {
     try {
         const result = await pool.query(
             `SELECT lp.id, lp.name, lp.description, lp.created_at,
-              COUNT(lpc.id) AS course_count
+              COUNT(lpc.id)::int AS course_count
        FROM learning_paths lp
        LEFT JOIN learning_path_courses lpc ON lpc.learning_path_id = lp.id
        WHERE lp.instructor_id = $1
-       GROUP BY lp.id
+       GROUP BY lp.id, lp.name, lp.description, lp.created_at
        ORDER BY lp.created_at DESC`,
             [instructorId]
         );
