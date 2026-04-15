@@ -574,28 +574,44 @@ export const createGroup = async (req, res) => {
 export const getMyGroups = async (req, res) => {
   try {
     const userId = req.user.id;
-const result = await pool.query(
-  `
-  SELECT 
-    g.*,
-    lm.text AS last_message,
-    COUNT(gm2.user_id)::int AS member_count
-  FROM college_groups g
-  JOIN clg_group_members gm ON g.group_id = gm.group_id
-  LEFT JOIN LATERAL (
-    SELECT text
-    FROM messages
-    WHERE group_id = g.group_id
-    ORDER BY created_at DESC
-    LIMIT 1
-  ) lm ON true
-  LEFT JOIN clg_group_members gm2 ON gm2.group_id = g.group_id
-  WHERE gm.user_id = $1
-  GROUP BY g.group_id, lm.text
-  ORDER BY g.created_at DESC
-  `,
-  [userId]
-);
+    const result = await pool.query(
+      `
+      SELECT 
+        g.group_id,
+        g.name,
+        g.description,
+        g.college,
+        g.creator_id,
+        g.meeting_link,
+        g.created_at,
+        g.updated_at,
+        lm.text AS last_message,
+        COUNT(DISTINCT gm2.user_id)::int AS member_count
+      FROM college_groups g
+      JOIN clg_group_members gm ON g.group_id = gm.group_id
+      LEFT JOIN LATERAL (
+        SELECT text
+        FROM messages
+        WHERE group_id = g.group_id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) lm ON true
+      LEFT JOIN clg_group_members gm2 ON gm2.group_id = g.group_id
+      WHERE gm.user_id = $1
+      GROUP BY
+        g.group_id,
+        g.name,
+        g.description,
+        g.college,
+        g.creator_id,
+        g.meeting_link,
+        g.created_at,
+        g.updated_at,
+        lm.text
+      ORDER BY g.created_at DESC
+      `,
+      [userId]
+    );
 
 
     res.json(result.rows);
